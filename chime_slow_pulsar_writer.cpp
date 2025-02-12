@@ -115,6 +115,13 @@ void chime_slow_pulsar_writer::set_params(const ssize_t beam_id, const ssize_t n
             this->_get_new_chunk_with_locks(nbins);
         }
         
+        if ((pstate->base_path == base_path && 
+            pstate->nfreq_out == nfreq_out) &&
+            (pstate->ntime_out == ntime_out && 
+            pstate->nbins == nbins)
+            ){
+            throw runtime_error("rf_pipelines::chime_slow_pulsar_writer::set_params(): No change in parameters.");
+            }
         // forgo checks on path validity for now
         pstate->base_path = base_path;
 
