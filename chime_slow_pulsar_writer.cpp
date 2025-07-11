@@ -491,12 +491,12 @@ void chime_slow_pulsar_writer::_process_chunk(float *intensity, ssize_t istride,
             const __m256i shift0 = _mm256_set_epi32(1,1,1,1,1,1,1,1);
             const __m256i shift1 = _mm256_set_epi32(2,2,2,2,2,2,2,2);
             const __m256i shift2 = _mm256_set_epi32(4,4,4,4,4,4,4,4);
-            __m256 ones = _mm256_set1_ps(1.);
+            const __m256 ones = _mm256_set1_ps(1.);
             for(ssize_t iframe_o = 0; iframe_o < ntime_out/8; iframe_o+=1){
                 const ssize_t itime_o = iframe_o * 8;
                 const __m256 mvari = _mm256_load_ps(ds_ic + itime_o);
                 // const __m256 mmask = _mm256_load_ps(ds_wc + itime_o);
-                __m256 mmask = _mm256_load_ps(mask + itime_o);
+                __m256 mmask = _mm256_load_ps(ds_wc + itime_o);
                 mmask = _mm256_min_ps(mmask, ones);
                 ms0 = _mm256_mul_ps(mvari, mmask);
                 ms1 = _mm256_add_ps(ms0, ms1);
