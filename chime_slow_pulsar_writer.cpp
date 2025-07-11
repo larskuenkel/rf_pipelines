@@ -411,7 +411,7 @@ void chime_slow_pulsar_writer::_process_chunk(float *intensity, ssize_t istride,
         uint32_t* tmp0 = get_ptr<uint32_t>(tmp_intrin);
         float* tmp1 = get_ptr<float>(tmp_intrinf1);
         float* tmp2 = get_ptr<float>(tmp_intrinf2);
-        float* tmp2 = get_ptr<float>(tmp_intrinf3);
+        float* tmp3 = get_ptr<float>(tmp_intrinf3);
         float fnorm;
 
         // estimate channel mean and var, compute mask
@@ -533,7 +533,7 @@ void chime_slow_pulsar_writer::_process_chunk(float *intensity, ssize_t istride,
                 s2 += tmp3[i];
             }
 
-            // Repeat calvulation with old scheme if full chunk is masked
+            // Repeat calculation with old scheme if full chunk is masked
             // Could also calculate if chunk if fully masked before the full loop
             // Performance of alternate scheme most likely depends on fraction of fully masked chunks
             if (s3 == 0){
