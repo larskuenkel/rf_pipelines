@@ -501,13 +501,13 @@ void chime_slow_pulsar_writer::_process_chunk(float *intensity, ssize_t istride,
                 ms3 = _mm256_add_ps(mmask, ms3);
 
                 // compute mask
-                // __m256i mvarw = _mm256_cvtps_epi32(_mm256_load_ps(ds_wc + itime_o));
-                // mvarw = _mm256_srlv_epi32(mvarw, shift_ds); // divide by downsampling factor
-                // mvarw = _mm256_add_epi32(mvarw, _mm256_shuffle_epi32(_mm256_sllv_epi32(mvarw, shift0), 177));
-                // mvarw = _mm256_add_epi32(mvarw, _mm256_shuffle_epi32(_mm256_sllv_epi32(mvarw, shift1), 2));
-                // mvarw = _mm256_add_epi32(mvarw, _mm256_sllv_epi32(_mm256_permute2f128_si256(mvarw, mvarw, 1), shift2));
+                __m256i mvarw = _mm256_cvtps_epi32(_mm256_load_ps(ds_wc + itime_o));
+                mvarw = _mm256_srlv_epi32(mvarw, shift_ds); // divide by downsampling factor
+                mvarw = _mm256_add_epi32(mvarw, _mm256_shuffle_epi32(_mm256_sllv_epi32(mvarw, shift0), 177));
+                mvarw = _mm256_add_epi32(mvarw, _mm256_shuffle_epi32(_mm256_sllv_epi32(mvarw, shift1), 2));
+                mvarw = _mm256_add_epi32(mvarw, _mm256_sllv_epi32(_mm256_permute2f128_si256(mvarw, mvarw, 1), shift2));
 
-                // _mm256_store_si256((__m256i*) tmp0, mvarw);
+                _mm256_store_si256((__m256i*) tmp0, mvarw);
                 // uint8_t mask_byte = 0;
                 // for(ssize_t itime_i = 0; itime_i < 8; itime_i++){
                     // const uint8_t w = ((uint8_t) ds_wc[itime_o + itime_i]) / (nds_tot);
@@ -515,7 +515,7 @@ void chime_slow_pulsar_writer::_process_chunk(float *intensity, ssize_t istride,
                 // }
                 // std::cout << std::endl;
 
-                // mask_tmp_ar[ifreq * nrow_mask + iframe_o] = (uint8_t) tmp0[0];
+                mask_tmp_ar[ifreq * nrow_mask + iframe_o] = (uint8_t) tmp0[0];
                 // mask_tmp_ar[ifreq * nrow_mask + itime_o] = mask_byte;
                 // std::bitset<8> x((uint8_t) tmp_intrin[0]);
                 // std::bitset<8> y((uint8_t) mask_byte);
