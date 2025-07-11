@@ -530,13 +530,13 @@ void chime_slow_pulsar_writer::_process_chunk(float *intensity, ssize_t istride,
             for(ssize_t i = 0; i < 8; i++){
                 s1 += tmp1[i];
                 s2 += tmp2[i];
-                s2 += tmp3[i];
+                s3 += tmp3[i];
             }
 
             // Repeat calculation with old scheme if full chunk is masked
             // Could also calculate if chunk if fully masked before the full loop
             // Performance of alternate scheme most likely depends on fraction of fully masked chunks
-            if (s3 == 0){
+            if (s3 == 0.){
                 s1 = 0.;
                 s2 = 0.;
                 __m256 ms0 = _mm256_set1_ps(0.);
@@ -553,26 +553,7 @@ void chime_slow_pulsar_writer::_process_chunk(float *intensity, ssize_t istride,
                     s1 += tmp1[i];
                     s2 += tmp2[i];
                 }
-                s3 = ntime_out;
-            }
-            if (s3 == 0){
-                s1 = 0.;
-                s2 = 0.;
-                __m256 ms0 = _mm256_set1_ps(0.);
-                __m256 ms1 = _mm256_set1_ps(0.);
-                for(ssize_t iframe_o = 0; iframe_o < ntime_out/8; iframe_o+=1){
-                    const ssize_t itime_o = iframe_o * 8;
-                    const __m256 mvari = _mm256_load_ps(intensity + itime_o);
-                    ms1 = _mm256_add_ps(mvari, ms1);
-                    ms2 = _mm256_fmadd_ps(mvari, mvari, ms2);
-                    }
-                    _mm256_store_ps(tmp1, ms1);
-                    _mm256_store_ps(tmp2, ms2);
-                    s3 = float(pstate->ntime_out);
-                    for(ssize_t i = 0; i < 8; i++){
-                        s1 += tmp1[i];
-                        s2 += tmp2[i];
-                    }
+                s3 = float(ntime_out);
             }
 
             // auto t22 = std::chrono::high_resolution_clock::now();
