@@ -493,8 +493,8 @@ void chime_slow_pulsar_writer::_process_chunk(float *intensity, ssize_t istride,
             const __m256i shift2 = _mm256_set_epi32(4,4,4,4,4,4,4,4);
             for(ssize_t iframe_o = 0; iframe_o < ntime_out/8; iframe_o+=1){
                 const ssize_t itime_o = iframe_o * 8;
-                const __m256 mvari = _mm256_load_ps(intensity + itime_o);
-                const __m256 mmask = _mm256_load_ps(mask + itime_o);
+                const __m256 mvari = _mm256_load_ps(ds_ic + itime_o);
+                const __m256 mmask = _mm256_load_ps(ds_wc + itime_o);
                 ms0 = _mm256_mul_ps(mvari, mmask);
                 ms1 = _mm256_add_ps(ms0, ms1);
                 ms2 = _mm256_fmadd_ps(ms0, ms0, ms2);
@@ -543,7 +543,7 @@ void chime_slow_pulsar_writer::_process_chunk(float *intensity, ssize_t istride,
                 __m256 ms1 = _mm256_set1_ps(0.);
                 for(ssize_t iframe_o = 0; iframe_o < ntime_out/8; iframe_o+=1){
                     const ssize_t itime_o = iframe_o * 8;
-                    const __m256 mvari = _mm256_load_ps(intensity + itime_o);
+                    const __m256 mvari = _mm256_load_ps(ds_ic + itime_o);
                     ms1 = _mm256_add_ps(mvari, ms1);
                     ms2 = _mm256_fmadd_ps(mvari, mvari, ms2);
                     }
