@@ -495,20 +495,9 @@ void chime_slow_pulsar_writer::_process_chunk(float *intensity, ssize_t istride,
             const __m256 ndss_corr = _mm256_set1_ps(nds_tot-1);
             for(ssize_t iframe_o = 0; iframe_o < ntime_out/8; iframe_o+=1){
                 const ssize_t itime_o = iframe_o * 8;
-                const __m256 mvari = _mm256_load_ps(ds_ic + itime_o);
-                // const __m256 mmask = _mm256_load_ps(ds_wc + itime_o);
-                __m256 mmask = _mm256_load_ps(ds_wc + itime_o);
-                // Create array which is 1 for values with full weight and 0 otherwise
-                mmask = _mm256_sub_ps(mmask, ndss_corr);
-                mmask = _mm256_max_ps(mmask, zeroes);
-                // Ideally would perform early stopping if mmask only contains 0, but did not find fast operation
-                ms0 = _mm256_mul_ps(mvari, mmask);
-                ms1 = _mm256_add_ps(ms0, ms1);
-                ms2 = _mm256_fmadd_ps(ms0, ms0, ms2);
-                ms3 = _mm256_add_ps(mmask, ms3);
-
                 // compute mask
-                __m256i mvarw = _mm256_cvtps_epi32(_mm256_load_ps(ds_wc + itime_o));
+                __m256 mmask = _mm256_load_ps(ds_wc + itime_o);
+                __m256i mvarw = _mm256_cvtps_epi32(mmask);
                 mvarw = _mm256_srlv_epi32(mvarw, shift_ds); // divide by downsampling factor
                 mvarw = _mm256_add_epi32(mvarw, _mm256_shuffle_epi32(_mm256_sllv_epi32(mvarw, shift0), 177));
                 mvarw = _mm256_add_epi32(mvarw, _mm256_shuffle_epi32(_mm256_sllv_epi32(mvarw, shift1), 2));
@@ -528,6 +517,21 @@ void chime_slow_pulsar_writer::_process_chunk(float *intensity, ssize_t istride,
                 // std::bitset<8> y((uint8_t) mask_byte);
                 // // std::cout << "wut2" << endl;
                 // std::cout << (((uint8_t) tmp_intrin[0]) - mask_byte) << " " << x << " " << y << " " << ((uint32_t) ((uint8_t) tmp_intrin[0])) << " " << ((uint32_t) mask_byte) << std::endl;
+
+                // tmp[0] will be 0 for fully masked frames, which allows skipping those iterations
+                if (tmp0[0] == 0){continue;}
+
+                // compute means and squares
+                const __m256 mvari = _mm256_load_ps(ds_ic + itime_o);
+                // Create array which is 1 for values with full weight and 0 otherwise
+                mmask = _mm256_sub_ps(mmask, ndss_corr);
+                mmask = _mm256_max_ps(mmask, zeroes);
+                // Multiply with mask in order to ignore masked values
+                ms0 = _mm256_mul_ps(mvari, mmask);
+                ms1 = _mm256_add_ps(ms0, ms1);
+                ms2 = _mm256_fmadd_ps(ms0, ms0, ms2);
+                // Get number of unmasked bins
+                ms3 = _mm256_add_ps(mmask, ms3);
             }
 
             _mm256_store_ps(tmp1, ms1);
