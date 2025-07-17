@@ -727,6 +727,7 @@ struct chime_slow_pulsar_writer : public wi_transform
 
     struct param_state{
         std::shared_ptr<std::string> base_path;
+        std::shared_ptr<std::string> source;
         std::shared_ptr<rf_kernels::wi_downsampler> downsampler;
         // std::shared_ptr<ch_frb_io::intensity_network_stream> stream;
         ssize_t beam_id = -1;
@@ -790,17 +791,17 @@ struct chime_slow_pulsar_writer : public wi_transform
     
     real_time_state rt_state;
 
-    chime_slow_pulsar_writer(ssize_t nt_chunk);
+    chime_slow_pulsar_writer(ssize_t nt_chunk, const std::string &name);
 
     // Called by RPC thread, once during initialization.
     void init_real_time_state(const real_time_state &rt_state);
 
     // Called by RPC thread, intermittently while pipeline is running.
     // void set_params(const ssize_t beam_id, const ssize_t ibeam, const ssize_t nfreq, 
-    //                 const ssize_t ntime, const ssize_t nbins, std::shared_ptr<std::string> base_path
+    //                 const ssize_t ntime, const ssize_t nbins, std::shared_ptr<std::string> base_path, std::shared_ptr<std::string> source
     //                 std::shared_ptr<ch_frb_io::intensity_network_stream> stream);
     void set_params(const ssize_t beam_id, const ssize_t nfreq_out, 
-		    const ssize_t ntime_out, const ssize_t nbins, std::shared_ptr<std::string> base_path);
+		    const ssize_t ntime_out, const ssize_t nbins, std::shared_ptr<std::string> base_path, std::shared_ptr<std::string> source);
 
     // Called interally to populate and write an sp_file_header to tmp_buf
     void _update_file_header_with_lock();
