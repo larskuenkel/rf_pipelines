@@ -24,11 +24,12 @@ struct chime_slow_pulsar_context
 
 };
 
-chime_slow_pulsar_writer::chime_slow_pulsar_writer(ssize_t nt_chunk_) :
-    wi_transform("chime_slow_pulsar_writer")
+chime_slow_pulsar_writer::chime_slow_pulsar_writer(ssize_t nt_chunk_, const std::string &name_) :
+    wi_transform("chime_slow_pulsar_writer", name_)
 {
     // Note: nt_chunk is defined in wi_transform base class.
     this->nt_chunk = nt_chunk_;
+    this->name = name_;
     const ssize_t ntime_max = 4096;
     const ssize_t nfreq_max = 16384;
     const ssize_t nsamp_max = nfreq_max * ntime_max;
@@ -95,7 +96,7 @@ void chime_slow_pulsar_writer::init_real_time_state(const real_time_state &rt_st
 
 
 void chime_slow_pulsar_writer::set_params(const ssize_t beam_id, const ssize_t nfreq_out, 
-					  const ssize_t ntime_out, const ssize_t nbins, std::shared_ptr<std::string> base_path)
+					  const ssize_t ntime_out, const ssize_t nbins, std::shared_ptr<std::string> base_path, std::shared_ptr<std::string> source)
 { 
     // FIXME add more asserts here
     rf_assert(beam_id == this->beam_id);
@@ -118,6 +119,7 @@ void chime_slow_pulsar_writer::set_params(const ssize_t beam_id, const ssize_t n
         
         // forgo checks on path validity for now
         pstate->base_path = base_path;
+        pstate->source = source;
 
         pstate->nfreq_out = nfreq_out;
         pstate->ntime_out = ntime_out;
@@ -657,7 +659,15 @@ shared_ptr<chime_slow_pulsar_writer> chime_slow_pulsar_writer::from_json(const J
     ssize_t ntime_out = 0;
     ssize_t nbins = 0;
     string base_path = "";
-    string key = "nfreq_out";
+    string source = "";
+    string name = "";
+
+    string key = "";
+
+    key = "name";
+    if (j.isMember(key))
+        name = j[key].asString();
+    key = "nfreq_out";
     if (j.isMember(key))
         nfreq_out = j[key].asInt();
     key = "ntime_out";
@@ -669,10 +679,13 @@ shared_ptr<chime_slow_pulsar_writer> chime_slow_pulsar_writer::from_json(const J
     key = "base_path";
     if (j.isMember(key))
         base_path = j[key].asString();
+    key = "source";
+    if (j.isMember(key))
+        source = j[key].asString();
 
-    auto sps = make_shared<chime_slow_pulsar_writer> (nt_chunk);
+    auto sps = make_shared<chime_slow_pulsar_writer> (nt_chunk, name);
 
-    if ((base_path.size() > 0) && (nfreq_out > 0) && (ntime_out > 0) && (nbins > 0))
+    if ((base_path.size() > 0) && (source.size() > 0) && (nfreq_out > 0) && (ntime_out > 0) && (nbins > 0))
 	cout << "FIXME: ignoring initial_params for now" << endl;
 
     return sps;
