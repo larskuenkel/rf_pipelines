@@ -443,44 +443,6 @@ void chime_slow_pulsar_writer::_process_chunk(float *intensity, ssize_t istride,
             ssize_t ibit_w = 0;
             uint8_t* mask_tmp_ar = get_ptr<uint8_t>(tmp_mask);
 
-            // auto t21 = std::chrono::high_resolution_clock::now();
-            // for(ssize_t itime = 0; itime < pstate->ntime_out; itime++){
-            //     const float v = ds_ic[ifreq * istridec + itime];
-            //     s1 += v;
-            //     s2 += v*v;
-
-            //     // this is a particularly inelegant solution
-            //     // TODO: FIX
-            //     float w = ds_wc[ifreq * wstridec + itime];
-            //     // std::cout << w << std::endl;
-            //     mask_byte += ((uint8_t) w) << ibit_w;
-
-            //     ibit_w++;
-            //     if(ibit_w == 8){
-            //         ibit_w = 0;
-            //         ibyte_w += 1;
-            //         (*tmp_mask)[ifreq * nrow_mask + ibyte_w] = mask_byte;
-            //         mask_byte = 0;
-            //     }
-            // }
-
-            // for(ssize_t itime_o = 0; itime_o < pstate->ntime_out; itime_o+=8){
-            //     uint8_t mask_byte = 0;
-            //     const ssize_t iind = ifreq * istridec + itime_o;
-            //     const ssize_t wind = ifreq * wstridec + itime_o;
-            //     for(ssize_t itime_i = 0; itime_i < 8; itime_i++){
-            //         const float v = ds_ic[iind + itime_i];
-            //         s1 += v;
-            //         s2 += v*v;
-
-            //         // this is a particularly inelegant solution
-            //         // TODO: FIX
-            //         const float w = ds_wc[wind + itime_i];
-            //         // std::cout << w << std::endl;
-            //         mask_byte += ((uint8_t) w) << itime_i;
-            //     }
-            //     mask_tmp_ar[ifreq * nrow_mask + itime_o] = mask_byte;
-            // }
             __m256 ms0 = _mm256_set1_ps(0.);
             __m256 ms1 = _mm256_set1_ps(0.);
             __m256 ms2 = _mm256_set1_ps(0.);
@@ -491,31 +453,21 @@ void chime_slow_pulsar_writer::_process_chunk(float *intensity, ssize_t istride,
             const __m256i shift0 = _mm256_set_epi32(1,1,1,1,1,1,1,1);
             const __m256i shift1 = _mm256_set_epi32(2,2,2,2,2,2,2,2);
             const __m256i shift2 = _mm256_set_epi32(4,4,4,4,4,4,4,4);
-            const __m256 zeroes = _mm256_set1_ps(0.);
-            const __m256 ndss_corr = _mm256_set1_ps(nds_tot-1);
+
             for(ssize_t iframe_o = 0; iframe_o < ntime_out/8; iframe_o+=1){
                 const ssize_t itime_o = iframe_o * 8;
                 // compute mask
                 __m256i mmask_i = _mm256_cvtps_epi32(_mm256_load_ps(ds_wc + itime_o));
                 mmask_i = _mm256_srlv_epi32(mmask_i, shift_ds); // divide by downsampling factor
+                // The add and shuffle operations will sum all 8 values into the first entry.
+                // The _mm256_sllv_epi32 operation will shift the value so that each bit in the resulting mask value
+                // represents one of the 8 input values.
                 __m256i mvarw = _mm256_add_epi32(mmask_i, _mm256_shuffle_epi32(_mm256_sllv_epi32(mmask_i, shift0), 177));
                 mvarw = _mm256_add_epi32(mvarw, _mm256_shuffle_epi32(_mm256_sllv_epi32(mvarw, shift1), 2));
                 mvarw = _mm256_add_epi32(mvarw, _mm256_sllv_epi32(_mm256_permute2f128_si256(mvarw, mvarw, 1), shift2));
 
                 _mm256_store_si256((__m256i*) tmp0, mvarw);
-                // uint8_t mask_byte = 0;
-                // for(ssize_t itime_i = 0; itime_i < 8; itime_i++){
-                    // const uint8_t w = ((uint8_t) ds_wc[itime_o + itime_i]) / (nds_tot);
-                    // mask_byte += ((uint8_t) w) << itime_i;
-                // }
-                // std::cout << std::endl;
-
                 mask_tmp_ar[ifreq * nrow_mask + iframe_o] = (uint8_t) tmp0[0];
-                // mask_tmp_ar[ifreq * nrow_mask + itime_o] = mask_byte;
-                // std::bitset<8> x((uint8_t) tmp_intrin[0]);
-                // std::bitset<8> y((uint8_t) mask_byte);
-                // // std::cout << "wut2" << endl;
-                // std::cout << (((uint8_t) tmp_intrin[0]) - mask_byte) << " " << x << " " << y << " " << ((uint32_t) ((uint8_t) tmp_intrin[0])) << " " << ((uint32_t) mask_byte) << std::endl;
 
                 // tmp[0] will be 0 for fully masked frames, which allows skipping those iterations
                 if (tmp0[0] == 0){continue;}
@@ -542,7 +494,7 @@ void chime_slow_pulsar_writer::_process_chunk(float *intensity, ssize_t istride,
                 s3 += tmp3[i];
             }
 
-            // Repeat calculation including also masked values if full chunk is masked
+            // Repeat calculation including masked values if full chunk is masked
             if (s3 == 0.){
                 s1 = 0.;
                 s2 = 0.;
