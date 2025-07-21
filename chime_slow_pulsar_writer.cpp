@@ -48,6 +48,7 @@ chime_slow_pulsar_writer::chime_slow_pulsar_writer(ssize_t nt_chunk_, const std:
     this->tmp_intrin = std::shared_ptr<uint32_t>(aligned_alloc<uint32_t>(8, 32, false), free);
     this->tmp_intrinf1 = std::shared_ptr<float>(aligned_alloc<float>(8, 32, false), free);
     this->tmp_intrinf2 = std::shared_ptr<float>(aligned_alloc<float>(8, 32, false), free);
+    this->tmp_intrinf3 = std::shared_ptr<float>(aligned_alloc<float>(8, 32, false), free);
 
     this->tmp_i = std::shared_ptr<float>(aligned_alloc<float>(nsamp_max, 32, false), free);
     this->tmp_w = std::shared_ptr<float>(aligned_alloc<float>(nsamp_max, 32, false), free);
@@ -412,6 +413,7 @@ void chime_slow_pulsar_writer::_process_chunk(float *intensity, ssize_t istride,
         uint32_t* tmp0 = get_ptr<uint32_t>(tmp_intrin);
         float* tmp1 = get_ptr<float>(tmp_intrinf1);
         float* tmp2 = get_ptr<float>(tmp_intrinf2);
+        float* tmp3 = get_ptr<float>(tmp_intrinf3);
         float fnorm;
 
         // estimate channel mean and var, compute mask
@@ -438,91 +440,81 @@ void chime_slow_pulsar_writer::_process_chunk(float *intensity, ssize_t istride,
 
             float s1 = 0.;
             float s2 = 0.;
+            float s3 = 0.;
             ssize_t ibyte_w = 0;
             ssize_t ibit_w = 0;
             uint8_t* mask_tmp_ar = get_ptr<uint8_t>(tmp_mask);
 
-            // auto t21 = std::chrono::high_resolution_clock::now();
-            // for(ssize_t itime = 0; itime < pstate->ntime_out; itime++){
-            //     const float v = ds_ic[ifreq * istridec + itime];
-            //     s1 += v;
-            //     s2 += v*v;
-
-            //     // this is a particularly inelegant solution
-            //     // TODO: FIX
-            //     float w = ds_wc[ifreq * wstridec + itime];
-            //     // std::cout << w << std::endl;
-            //     mask_byte += ((uint8_t) w) << ibit_w;
-
-            //     ibit_w++;
-            //     if(ibit_w == 8){
-            //         ibit_w = 0;
-            //         ibyte_w += 1;
-            //         (*tmp_mask)[ifreq * nrow_mask + ibyte_w] = mask_byte;
-            //         mask_byte = 0;
-            //     }
-            // }
-
-            // for(ssize_t itime_o = 0; itime_o < pstate->ntime_out; itime_o+=8){
-            //     uint8_t mask_byte = 0;
-            //     const ssize_t iind = ifreq * istridec + itime_o;
-            //     const ssize_t wind = ifreq * wstridec + itime_o;
-            //     for(ssize_t itime_i = 0; itime_i < 8; itime_i++){
-            //         const float v = ds_ic[iind + itime_i];
-            //         s1 += v;
-            //         s2 += v*v;
-
-            //         // this is a particularly inelegant solution
-            //         // TODO: FIX
-            //         const float w = ds_wc[wind + itime_i];
-            //         // std::cout << w << std::endl;
-            //         mask_byte += ((uint8_t) w) << itime_i;
-            //     }
-            //     mask_tmp_ar[ifreq * nrow_mask + itime_o] = mask_byte;
-            // }
+            __m256 ms0 = _mm256_set1_ps(0.);
             __m256 ms1 = _mm256_set1_ps(0.);
             __m256 ms2 = _mm256_set1_ps(0.);
-            // const __m128i shift0 = _mm_set_epi32(1,1,1,1);
+            __m256 ms3 = _mm256_set1_ps(0.);
+
             const __m256i shift_ds = _mm256_set_epi32(log_nds_tot, log_nds_tot, log_nds_tot, log_nds_tot,
                                                       log_nds_tot, log_nds_tot, log_nds_tot, log_nds_tot);
             const __m256i shift0 = _mm256_set_epi32(1,1,1,1,1,1,1,1);
             const __m256i shift1 = _mm256_set_epi32(2,2,2,2,2,2,2,2);
             const __m256i shift2 = _mm256_set_epi32(4,4,4,4,4,4,4,4);
+
             for(ssize_t iframe_o = 0; iframe_o < ntime_out/8; iframe_o+=1){
                 const ssize_t itime_o = iframe_o * 8;
-                const __m256 mvari = _mm256_load_ps(ds_ic + itime_o);
-                ms1 = _mm256_add_ps(mvari, ms1);
-                ms2 = _mm256_fmadd_ps(mvari, mvari, ms2);
-
                 // compute mask
-                __m256i mvarw = _mm256_cvtps_epi32(_mm256_load_ps(ds_wc + itime_o));
-                mvarw = _mm256_srlv_epi32(mvarw, shift_ds); // divide by downsampling factor
-                mvarw = _mm256_add_epi32(mvarw, _mm256_shuffle_epi32(_mm256_sllv_epi32(mvarw, shift0), 177));
+                __m256i mmask_i = _mm256_cvtps_epi32(_mm256_load_ps(ds_wc + itime_o));
+                mmask_i = _mm256_srlv_epi32(mmask_i, shift_ds); // divide by downsampling factor
+                // The add and shuffle operations will sum all 8 values into the first entry.
+                // The _mm256_sllv_epi32 operation will shift the value so that each bit in the resulting mask value
+                // represents one of the 8 input values.
+                __m256i mvarw = _mm256_add_epi32(mmask_i, _mm256_shuffle_epi32(_mm256_sllv_epi32(mmask_i, shift0), 177));
                 mvarw = _mm256_add_epi32(mvarw, _mm256_shuffle_epi32(_mm256_sllv_epi32(mvarw, shift1), 2));
                 mvarw = _mm256_add_epi32(mvarw, _mm256_sllv_epi32(_mm256_permute2f128_si256(mvarw, mvarw, 1), shift2));
 
                 _mm256_store_si256((__m256i*) tmp0, mvarw);
-                // uint8_t mask_byte = 0;
-                // for(ssize_t itime_i = 0; itime_i < 8; itime_i++){
-                    // const uint8_t w = ((uint8_t) ds_wc[itime_o + itime_i]) / (nds_tot);
-                    // mask_byte += ((uint8_t) w) << itime_i;
-                // }
-                // std::cout << std::endl;
-
                 mask_tmp_ar[ifreq * nrow_mask + iframe_o] = (uint8_t) tmp0[0];
-                // mask_tmp_ar[ifreq * nrow_mask + itime_o] = mask_byte;
-                // std::bitset<8> x((uint8_t) tmp_intrin[0]);
-                // std::bitset<8> y((uint8_t) mask_byte);
-                // // std::cout << "wut2" << endl;
-                // std::cout << (((uint8_t) tmp_intrin[0]) - mask_byte) << " " << x << " " << y << " " << ((uint32_t) ((uint8_t) tmp_intrin[0])) << " " << ((uint32_t) mask_byte) << std::endl;
+
+                // tmp[0] will be 0 for fully masked frames, which allows skipping those iterations
+                if (tmp0[0] == 0){continue;}
+
+                // compute means and squares
+                const __m256 mvari = _mm256_load_ps(ds_ic + itime_o);
+                // convert integer mask to float
+                __m256 mmask_f = _mm256_cvtepi32_ps(mmask_i);
+                // Multiply with mask in order to ignore masked values
+                ms0 = _mm256_mul_ps(mvari, mmask_f);
+                ms1 = _mm256_add_ps(ms0, ms1);
+                ms2 = _mm256_fmadd_ps(ms0, ms0, ms2);
+                // Get number of unmasked bins
+                ms3 = _mm256_add_ps(mmask_f, ms3);
             }
 
             _mm256_store_ps(tmp1, ms1);
             _mm256_store_ps(tmp2, ms2);
+            _mm256_store_ps(tmp3, ms3);
 
             for(ssize_t i = 0; i < 8; i++){
                 s1 += tmp1[i];
                 s2 += tmp2[i];
+                s3 += tmp3[i];
+            }
+
+            // Repeat calculation including masked values if full chunk is masked
+            if (s3 == 0.){
+                s1 = 0.;
+                s2 = 0.;
+                __m256 ms0 = _mm256_set1_ps(0.);
+                __m256 ms1 = _mm256_set1_ps(0.);
+                for(ssize_t iframe_o = 0; iframe_o < ntime_out/8; iframe_o+=1){
+                    const ssize_t itime_o = iframe_o * 8;
+                    const __m256 mvari = _mm256_load_ps(ds_ic + itime_o);
+                    ms1 = _mm256_add_ps(mvari, ms1);
+                    ms2 = _mm256_fmadd_ps(mvari, mvari, ms2);
+                    }
+                _mm256_store_ps(tmp1, ms1);
+                _mm256_store_ps(tmp2, ms2);
+                for(ssize_t i = 0; i < 8; i++){
+                    s1 += tmp1[i];
+                    s2 += tmp2[i];
+                }
+                s3 = float(ntime_out);
             }
 
             // auto t22 = std::chrono::high_resolution_clock::now();
@@ -531,9 +523,9 @@ void chime_slow_pulsar_writer::_process_chunk(float *intensity, ssize_t istride,
             // wdur += tmp1.count();
 
             // compute the relevant statistics
-            const float fmean = s1 / float(pstate->ntime_out);
-            const float f2mean = s2 / float(pstate->ntime_out);
-            const float fvar = (float(pstate->ntime_out) / float(pstate->ntime_out -1)) * (f2mean - fmean * fmean);
+            const float fmean = s1 / s3;
+            const float f2mean = s2 / s3;
+            const float fvar = (s3 / (s3 -1)) * (f2mean - fmean * fmean);
 
             (*tmp_mean)[ifreq]= fmean;
             (*tmp_var)[ifreq] = fvar;
